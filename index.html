@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Physics Simulator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+    <style>
+        body { display: flex; margin: 0; height: 100vh; }
+        #editor { width: 50%; height: 100%; position: relative;}
+        #scene { width: 50%; height: 100%; position: relative; }
+        #controls { position: absolute; top: 10px; left: 10px; z-index: 10; }
+        canvas { display: block; }
+        .CodeMirror {
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="editor"></div>
+    <div id="scene">
+        <div id="controls">
+            <button id="runButton">Run</button>
+            <button id="stopButton">Stop</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script>
+        // Initialize CodeMirror editor
+        const editor = CodeMirror(document.getElementById('editor'), {
+            mode: 'javascript',
+            lineNumbers: true,
+            value: `
+            const { Engine, Render, Runner, Bodies, Composite, Body } = Matter;
+
+            let engine, render, runner;
+
+            function runSimulation() {
+                engine = Engine.create();
+                render = Render.create({
+                    element: document.getElementById('scene'),
+                    engine: engine,
+                    options: {
+                        width: window.innerWidth / 2,
+                        height: window.innerHeight,
+                        wireframes: false
+                    }
+                });
+                
+                runner = Runner.create();
+                Render.run(render);
+                Runner.run(runner, engine);
+                
+                // Create walls around the scene
+                const wallOptions = {
+                    isStatic: true,
+                    render: {
+                        fillStyle: 'yellow'
+                    }
+                };
+                const wallThickness = 50;
+                const sceneWidth = window.innerWidth / 2;
+                const sceneHeight = window.innerHeight;
+
+                const walls = [
+                    // Top wall
+                    Bodies.rectangle(sceneWidth / 2, wallThickness / 2, sceneWidth, wallThickness, wallOptions),
+                    // Bottom wall
+                    Bodies.rectangle(sceneWidth / 2, sceneHeight - wallThickness / 2, sceneWidth, wallThickness, wallOptions),
+                    // Left wall
+                    Bodies.rectangle(wallThickness / 2, sceneHeight / 2, wallThickness, sceneHeight, wallOptions),
+                    // Right wall
+                    Bodies.rectangle(sceneWidth - wallThickness / 2, sceneHeight / 2, wallThickness, sceneHeight, wallOptions)
+                ];
+
+                Composite.add(engine.world, walls);
+
+                // Create ground
+                // const ground = Bodies.rectangle(window.innerWidth / 4, window.innerHeight, window.innerWidth / 2, 20, { isStatic: true, render: { fillStyle: 'white' } });
+                // Composite.add(engine.world, ground);
+
+                // Create platforms and terrain
+                const platformA = Bodies.rectangle(100, 500, 100, 20, { isStatic: true, render: { fillStyle: 'white' } });
+                const platformB = Bodies.rectangle(300, 550, 100, 20, { isStatic: true, render: { fillStyle: 'white' } });
+                const platformD = Bodies.rectangle(500, 550, 100, 20, { isStatic: true, render: { fillStyle: 'white' } });
+                const platformE = Bodies.rectangle(700, 300, 100, 20, { isStatic: true, render: { fillStyle: 'white' } });
+
+                Composite.add(engine.world, [platformA, platformB, platformD, platformE]);
+
+                // Create circle rocks
+                const solidRock = Bodies.circle(700, 260, 40, { restitution: 0.5 });
+                const hollowRock = Bodies.circle(300, 400, 40, { isStatic: false, render: { fillStyle: 'red' } });
+                const hole = Bodies.circle(300, 400, 20, { isStatic: true, render: { fillStyle: 'white' } });
+                
+                Composite.add(engine.world, [solidRock, hollowRock, hole]);
+
+                // Create trampoline
+                const trampoline = Bodies.rectangle(500, 600, 200, 20, {
+                    isStatic: true,
+                    render: {
+                        fillStyle: 'blue'
+                    }
+                });
+                Composite.add(engine.world, trampoline);
+
+                // Add mouse control
+                const mouse = Matter.Mouse.create(render.canvas);
+                const mouseConstraint = Matter.MouseConstraint.create(engine, {
+                    mouse: mouse,
+                    constraint: {
+                        stiffness: 0.2,
+                        render: {
+                            visible: false
+                        }
+                    }
+                });
+
+                Composite.add(engine.world, mouseConstraint);
+
+                // Keep the mouse in sync with rendering
+                render.mouse = mouse;
+
+                // Add interaction to push the boulder
+                document.addEventListener('keydown', event => {
+                    if (event.key === 'e' || event.key === 'E') {
+                        Body.applyForce(solidRock, solidRock.position, { x: -0.05, y: 0 });
+                    }
+                });
+            }
+
+            function stopSimulation() {
+                if (runner && render) {
+                    Render.stop(render);
+                    Runner.stop(runner);
+                    Composite.clear(engine.world);
+                    Engine.clear(engine);
+                    render.canvas.remove();
+                    render.canvas = null;
+                    render.context = null;
+                    render.textures = {};
+                }
+            }
+
+            document.getElementById('runButton').addEventListener('click', () => {
+                stopSimulation();
+                runSimulation();
+            });
+
+            document.getElementById('stopButton').addEventListener('click', stopSimulation);
+
+            window.addEventListener('resize', () => {
+                if (render) {
+                    render.canvas.width = window.innerWidth / 2;
+                    render.canvas.height = window.innerHeight;
+                    Matter.Bounds.update(render.bounds, {
+                        min: { x: 0, y: 0 },
+                        max: { x: window.innerWidth / 2, y: window.innerHeight }
+                    });
+                }
+            });
+            `
+        });
+
+        // Initial run of the simulation
+        function runEditorCode() {
+            try {
+                const userCode = editor.getValue();
+                new Function(userCode)();
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        document.getElementById('runButton').addEventListener('click', runEditorCode);
+    </script>
+</body>
+</html>
